@@ -31,30 +31,45 @@ def process_file(uploaded_file):
 
     # ===== CSV の場合：pandas を使わずに行ごとに読み込む =====
     if ext == ".csv":
-        raw = uploaded_file.read().decode("utf-8", errors="ignore").splitlines()
+    uploaded_file.seek(0)
+    raw_bytes = uploaded_file.read()
 
-        rows = []
-        for line in raw:
-            cols = line.split(",")
-            rows.append(cols)
+    # ★ まず UTF-8 で試す
+    try:
+        raw_text = raw_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        # ★ ダメなら CP932（Shift-JIS）
+        try:
+            raw_text = raw_bytes.decode("cp932")
+        except UnicodeDecodeError:
+            # ★ それでもダメなら置換して読む
+            raw_text = raw_bytes.decode("utf-8", errors="replace")
 
-        row_count = len(rows)
+    # 行ごとに分割
+    raw_lines = raw_text.splitlines()
 
-        # ★ 150 列 × 行数の配列を作成
-        base_array = np.empty((row_count, MAX_COL), dtype=object)
-        base_array[:] = ""
+    # 行ごとに split(",")
+    rows = [line.split(",") for line in raw_lines]
 
-        # ★ 各行を左詰めで格納
-        for i, cols in enumerate(rows):
-            limit = min(len(cols), MAX_COL)
-            base_array[i, :limit] = cols[:limit]
+    row_count = len(rows)
+    MAX_COL = 150
 
-        # pandas DataFrame に変換
-        df = pd.DataFrame(base_array)
+    # ★ 150 列固定の配列を作成
+    base_array = np.empty((row_count, MAX_COL), dtype=object)
+    base_array[:] = ""
 
-        # 1 行目をヘッダーにする
-        df.columns = df.iloc[0]
-        df = df[1:].reset_index(drop=True)
+    # ★ 左詰めで格納
+    for i, cols in enumerate(rows):
+        limit = min(len(cols), MAX_COL)
+        base_array[i, :limit] = cols[:limit]
+
+    # pandas DataFrame に変換
+    df = pd.DataFrame(base_array)
+
+    # 1 行目をヘッダーにする
+    df.columns = df.iloc[0]
+    df = df[1:].reset_index(drop=True)
+
 
     # ===== Excel の場合 =====
     elif ext in [".xlsx", ".xlsm"]:
@@ -167,6 +182,7 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
 
 
 
