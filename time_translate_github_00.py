@@ -28,7 +28,7 @@ def process_file(uploaded_file):
 
     MAX_COL = 150
 
-    # ===== CSV の場合：行ごとに読み込み、150列固定で格納 =====
+    # ===== CSV の場合 =====
     if ext == ".csv":
         raw_bytes = uploaded_file.read()
 
@@ -54,7 +54,6 @@ def process_file(uploaded_file):
             limit = min(len(cols), MAX_COL)
             base_array[i, :limit] = cols[:limit]
 
-        # pandas DataFrame に変換
         df = pd.DataFrame(base_array)
 
         # 1 行目をヘッダーに
@@ -75,6 +74,7 @@ def process_file(uploaded_file):
             base_array = np.hstack([base_array, pad])
 
         df = pd.DataFrame(base_array)
+
         df.columns = df.iloc[0]
         df = df[1:].reset_index(drop=True)
 
@@ -120,14 +120,12 @@ def process_file(uploaded_file):
             final_array[1:, excel_col - 1] = converted.iloc[1:].values
             converted_cache[col_name] = converted
 
-    # 深夜時間計
     if "所定内深夜時間" in converted_cache and "所定外深夜時間" in converted_cache:
         total = converted_cache["所定内深夜時間"] + converted_cache["所定外深夜時間"]
         final_array[1:, 105 - 1] = total.iloc[1:].values
 
     final_df = pd.DataFrame(final_array)
 
-    # ヘッダー整形
     headers = list(df.columns)
     while len(headers) < final_df.shape[1]:
         headers.append("")
@@ -141,7 +139,6 @@ def process_file(uploaded_file):
 
     final_df.columns = headers
 
-    # Excel 出力
     output = BytesIO()
     final_df.to_excel(output, index=False, engine="xlsxwriter")
     output.seek(0)
