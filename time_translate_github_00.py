@@ -30,11 +30,13 @@ def process_file(uploaded_file):
     uploaded_file.seek(0)
 
     if ext == ".csv":
+        uploaded_file.seek(0)
         try:
-            df = pd.read_csv(uploaded_file, dtype=str, encoding="utf-8")
+            df = pd.read_csv(uploaded_file, dtype=str, encoding="utf-8", engine="python")
         except UnicodeDecodeError:
-            uploaded_file.seek(0)  # ★ 再度戻す
-            df = pd.read_csv(uploaded_file, dtype=str, encoding="cp932")
+            uploaded_file.seek(0)
+            df = pd.read_csv(uploaded_file, dtype=str, encoding="cp932", engine="python")
+
 
     elif ext in [".xlsx", ".xlsm"]:
         uploaded_file.seek(0)  # ★ Excel 読み込み前も必要
@@ -153,6 +155,7 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
 
 
 
