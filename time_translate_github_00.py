@@ -78,8 +78,8 @@ def process_file(uploaded_file):
         104: "所定外深夜時間",
         106: "所定外勤務時間",
         107: "休日深夜時間",
-        108: "乖離時間（始業）",
-        109: "乖離時間（終業）",
+        108: "乖離時間(開始)",
+        109: "乖離時間(終了)",
         110: "年休換算時間",
         111: "調休換算時間",
         112: "不就業１時間",
@@ -97,8 +97,9 @@ def process_file(uploaded_file):
 
     for excel_col, col_name in mapping.items():
         if col_name in df.columns:
-            converted = convert_time_series(df[col_name].iloc[1:])
-            final_array[1:, excel_col - 1] = converted.values
+            converted = convert_time_series(df[col_name])  # 全行
+            final_array[1:, excel_col - 1] = converted.iloc[1:].values
+        
             converted_cache[col_name] = converted
 
     # 深夜時間計
@@ -157,3 +158,4 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
