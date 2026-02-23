@@ -12,12 +12,70 @@ st.title("勤怠データ変換アプリ")
 def convert_time_series(series):
     s = series.fillna("").astype(str).str.strip()
     hm = s.str.extract(r'^(\d{1,2})[:\'](\d{1,2})$')
-
     h = pd.to_numeric(hm[0], errors='coerce')
     m = pd.to_numeric(hm[1], errors='coerce')
+    return (h * 100 + m).fillna(0).astype("int32")
 
-    result = (h * 100 + m).fillna(0).astype("int32")
-    return result
+
+# ===== CSV 読み込み（150列固定 + BOM除去） =====
+def load_csv(uploaded_file, MAX_COL=150):
+
+    raw_bytes = uploaded_file.read()
+
+    # 文字コード判定
+    for enc in ["utf-8", "cp932"]:
+        try:
+            raw_text = raw_bytes.decode(enc)
+            break
+        except UnicodeDecodeError:
+            continue
+    else:
+        raw_text = raw_bytes.decode("utf-8", errors="replace")
+
+    rows = [line.split(",") for line in raw_text.splitlines()]
+
+    # ★ BOM 除去（これが超重要）
+    if rows and rows[0] and rows[0][0].startswith("\ufeff"):
+        rows[0][0] = rows[0][0].replace("\ufeff", "")
+
+    row_count = len(rows)
+
+    # ★ 150列固定配列
+    base_array = np.empty((row_count, MAX_COL), dtype=object)
+    base_array[:] = ""
+
+    for i, cols in enumerate(rows):
+        limit = min(len(cols), MAX_COL)
+        base_array[i, :limit] = cols[:limit]
+
+    df = pd.DataFrame(base_array)
+
+    # 1行目をヘッダーに
+    df.columns = df.iloc[0]
+    df = df[1:].reset_index(drop=True)
+
+    return df
+
+
+# ===== Excel 読み込み（150列固定） =====
+def load_excel(uploaded_file, MAX_COL=150):
+
+    df = pd.read_excel(uploaded_file, dtype=str).fillna("")
+    row_count = len(df)
+
+    base_array = df.to_numpy(dtype=object)
+
+    if base_array.shape[1] < MAX_COL:
+        pad = np.empty((row_count, MAX_COL - base_array.shape[1]), dtype=object)
+        pad[:] = ""
+        base_array = np.hstack([base_array, pad])
+
+    df = pd.DataFrame(base_array)
+
+    df.columns = df.iloc[0]
+    df = df[1:].reset_index(drop=True)
+
+    return df
 
 
 # ===== メイン変換処理 =====
@@ -26,66 +84,17 @@ def process_file(uploaded_file):
     ext = os.path.splitext(uploaded_file.name)[1].lower()
     uploaded_file.seek(0)
 
-    MAX_COL = 150
-
-    # ===== CSV の場合 =====
+    # ★ CSV と Excel を完全に分離
     if ext == ".csv":
-        raw_bytes = uploaded_file.read()
-
-        # 文字コード判定
-        try:
-            raw_text = raw_bytes.decode("utf-8")
-        except UnicodeDecodeError:
-            try:
-                raw_text = raw_bytes.decode("cp932")
-            except UnicodeDecodeError:
-                raw_text = raw_bytes.decode("utf-8", errors="replace")
-
-        raw_lines = raw_text.splitlines()
-        rows = [line.split(",") for line in raw_lines]
-
-        row_count = len(rows)
-
-        # ★ 150 列固定配列
-        base_array = np.empty((row_count, MAX_COL), dtype=object)
-        base_array[:] = ""
-
-        for i, cols in enumerate(rows):
-            limit = min(len(cols), MAX_COL)
-            base_array[i, :limit] = cols[:limit]
-
-        df = pd.DataFrame(base_array)
-
-        # 1 行目をヘッダーに
-        df.columns = df.iloc[0]
-        df = df[1:].reset_index(drop=True)
-
-    # ===== Excel の場合 =====
+        df = load_csv(uploaded_file)
     elif ext in [".xlsx", ".xlsm"]:
-        uploaded_file.seek(0)
-        df = pd.read_excel(uploaded_file, dtype=str).fillna("")
-        row_count = len(df)
-
-        base_array = df.to_numpy(dtype=object)
-
-        if base_array.shape[1] < MAX_COL:
-            pad = np.empty((row_count, MAX_COL - base_array.shape[1]), dtype=object)
-            pad[:] = ""
-            base_array = np.hstack([base_array, pad])
-
-        df = pd.DataFrame(base_array)
-
-        df.columns = df.iloc[0]
-        df = df[1:].reset_index(drop=True)
-
+        df = load_excel(uploaded_file)
     else:
         st.error("対応していないファイル形式です")
         return None
 
     # ===== ここから変換処理 =====
-
     df.columns = df.columns.str.strip()
-
     final_array = df.to_numpy(dtype=object)
 
     mapping = {
@@ -131,11 +140,9 @@ def process_file(uploaded_file):
         headers.append("")
 
     for excel_col, col_name in mapping.items():
-        if excel_col - 1 < len(headers):
-            headers[excel_col - 1] = col_name + "-t"
+        headers[excel_col - 1] = col_name + "-t"
 
-    if 105 - 1 < len(headers):
-        headers[105 - 1] = "深夜時間計-t"
+    headers[105 - 1] = "深夜時間計-t"
 
     final_df.columns = headers
 
