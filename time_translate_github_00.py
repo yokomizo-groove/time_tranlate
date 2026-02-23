@@ -26,13 +26,20 @@ def process_file(uploaded_file):
 
     ext = os.path.splitext(uploaded_file.name)[1].lower()
 
+    # ★ ファイルポインタを先頭に戻す（これが超重要）
+    uploaded_file.seek(0)
+
     if ext == ".csv":
         try:
             df = pd.read_csv(uploaded_file, dtype=str, encoding="utf-8")
         except UnicodeDecodeError:
+            uploaded_file.seek(0)  # ★ 再度戻す
             df = pd.read_csv(uploaded_file, dtype=str, encoding="cp932")
+
     elif ext in [".xlsx", ".xlsm"]:
+        uploaded_file.seek(0)  # ★ Excel 読み込み前も必要
         df = pd.read_excel(uploaded_file, dtype=str)
+
     else:
         st.error("対応していないファイル形式です")
         return None
@@ -50,7 +57,9 @@ def process_file(uploaded_file):
         pad[:] = ""
         base_array = np.hstack([base_array, pad])
 
+    # ★ ここを deep copy にする
     final_array = base_array.copy()
+
 
 
     mapping = {
@@ -144,6 +153,7 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
 
 
 
