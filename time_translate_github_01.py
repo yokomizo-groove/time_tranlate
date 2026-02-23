@@ -10,10 +10,15 @@ st.title("勤怠データ変換アプリ")
 
 def convert_time_series(series):
     s = series.fillna("").astype(str).str.strip()
-    hm = s.str.extract(r'^(\d{1,2})[:\'](\d{1,2})$')
+
+    # HH:MM:SS / H:MM:SS / HH:MM / H:MM に対応
+    hm = s.str.extract(r'^(\d{1,2})[:\'](\d{1,2})(?::\d{1,2})?$')
+
     h = pd.to_numeric(hm[0], errors='coerce')
     m = pd.to_numeric(hm[1], errors='coerce')
+
     return (h * 100 + m).fillna(0).astype("int32")
+
 
 
 def load_csv(uploaded_file, MAX_COL=150):
@@ -46,9 +51,13 @@ def load_csv(uploaded_file, MAX_COL=150):
 
 
 def load_excel(uploaded_file, MAX_COL=150):
-    df = pd.read_excel(uploaded_file, dtype=str).fillna("")
-    row_count = len(df)
 
+    df = pd.read_excel(uploaded_file, dtype=str).fillna("")
+
+    # Excel の時刻型を文字列に統一
+    df = df.astype(str)
+
+    row_count = len(df)
     base_array = df.to_numpy(dtype=object)
 
     if base_array.shape[1] < MAX_COL:
@@ -56,7 +65,6 @@ def load_excel(uploaded_file, MAX_COL=150):
         pad[:] = ""
         base_array = np.hstack([base_array, pad])
 
-    # もとの列名をそのまま使う（ヘッダー行は df.columns にだけ存在）
     cols = list(df.columns)
     if len(cols) < base_array.shape[1]:
         cols += [""] * (base_array.shape[1] - len(cols))
