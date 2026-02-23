@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
-import io
 from io import BytesIO
 
 st.set_page_config(page_title="勤怠変換アプリ", layout="centered")
@@ -29,47 +28,38 @@ def process_file(uploaded_file):
 
     MAX_COL = 150
 
-    # ===== CSV の場合：pandas を使わずに行ごとに読み込む =====
+    # ===== CSV の場合：行ごとに読み込み、150列固定で格納 =====
     if ext == ".csv":
-        uploaded_file.seek(0)
         raw_bytes = uploaded_file.read()
 
-    # ★ まず UTF-8 で試す
-    try:
-        raw_text = raw_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        # ★ ダメなら CP932（Shift-JIS）
+        # 文字コード判定
         try:
-            raw_text = raw_bytes.decode("cp932")
+            raw_text = raw_bytes.decode("utf-8")
         except UnicodeDecodeError:
-            # ★ それでもダメなら置換して読む
-            raw_text = raw_bytes.decode("utf-8", errors="replace")
+            try:
+                raw_text = raw_bytes.decode("cp932")
+            except UnicodeDecodeError:
+                raw_text = raw_bytes.decode("utf-8", errors="replace")
 
-    # 行ごとに分割
-    raw_lines = raw_text.splitlines()
+        raw_lines = raw_text.splitlines()
+        rows = [line.split(",") for line in raw_lines]
 
-    # 行ごとに split(",")
-    rows = [line.split(",") for line in raw_lines]
+        row_count = len(rows)
 
-    row_count = len(rows)
-    MAX_COL = 150
+        # ★ 150 列固定配列
+        base_array = np.empty((row_count, MAX_COL), dtype=object)
+        base_array[:] = ""
 
-    # ★ 150 列固定の配列を作成
-    base_array = np.empty((row_count, MAX_COL), dtype=object)
-    base_array[:] = ""
+        for i, cols in enumerate(rows):
+            limit = min(len(cols), MAX_COL)
+            base_array[i, :limit] = cols[:limit]
 
-    # ★ 左詰めで格納
-    for i, cols in enumerate(rows):
-        limit = min(len(cols), MAX_COL)
-        base_array[i, :limit] = cols[:limit]
+        # pandas DataFrame に変換
+        df = pd.DataFrame(base_array)
 
-    # pandas DataFrame に変換
-    df = pd.DataFrame(base_array)
-
-    # 1 行目をヘッダーにする
-    df.columns = df.iloc[0]
-    df = df[1:].reset_index(drop=True)
-
+        # 1 行目をヘッダーに
+        df.columns = df.iloc[0]
+        df = df[1:].reset_index(drop=True)
 
     # ===== Excel の場合 =====
     elif ext in [".xlsx", ".xlsm"]:
@@ -92,11 +82,10 @@ def process_file(uploaded_file):
         st.error("対応していないファイル形式です")
         return None
 
-    # ===== ここから先はあなたの元の処理 =====
+    # ===== ここから変換処理 =====
 
     df.columns = df.columns.str.strip()
 
-    row_count = len(df)
     final_array = df.to_numpy(dtype=object)
 
     mapping = {
@@ -131,12 +120,14 @@ def process_file(uploaded_file):
             final_array[1:, excel_col - 1] = converted.iloc[1:].values
             converted_cache[col_name] = converted
 
+    # 深夜時間計
     if "所定内深夜時間" in converted_cache and "所定外深夜時間" in converted_cache:
         total = converted_cache["所定内深夜時間"] + converted_cache["所定外深夜時間"]
         final_array[1:, 105 - 1] = total.iloc[1:].values
 
     final_df = pd.DataFrame(final_array)
 
+    # ヘッダー整形
     headers = list(df.columns)
     while len(headers) < final_df.shape[1]:
         headers.append("")
@@ -150,12 +141,12 @@ def process_file(uploaded_file):
 
     final_df.columns = headers
 
+    # Excel 出力
     output = BytesIO()
     final_df.to_excel(output, index=False, engine="xlsxwriter")
     output.seek(0)
 
     return output
-
 
 
 # ===== UI =====
@@ -165,13 +156,10 @@ uploaded_file = st.file_uploader(
 )
 
 if uploaded_file is not None:
-
     st.success("ファイルを読み込みました")
-
     result_file = process_file(uploaded_file)
 
     if result_file:
-
         base_name = os.path.splitext(uploaded_file.name)[0]
         download_name = f"{base_name}_output.xlsx"
 
@@ -180,14 +168,4 @@ if uploaded_file is not None:
             data=result_file,
             file_name=download_name,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-
         )
-
-
-
-
-
-
-
-
-
