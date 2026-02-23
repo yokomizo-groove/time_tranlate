@@ -26,40 +26,23 @@ def process_file(uploaded_file):
 
     ext = os.path.splitext(uploaded_file.name)[1].lower()
 
-    # ===== 重要：ポインタを先頭へ =====
-    uploaded_file.seek(0)
-    file_bytes = uploaded_file.read()
-
     if ext == ".csv":
-
         try:
-            df = pd.read_csv(
-                io.BytesIO(file_bytes),
-                dtype=str,
-                encoding="utf-8"
-            )
+            df = pd.read_csv(uploaded_file, dtype=str, encoding="utf-8")
         except UnicodeDecodeError:
-            df = pd.read_csv(
-                io.BytesIO(file_bytes),
-                dtype=str,
-                encoding="cp932"
-            )
-
+            df = pd.read_csv(uploaded_file, dtype=str, encoding="cp932")
     elif ext in [".xlsx", ".xlsm"]:
-
-        df = pd.read_excel(
-            BytesIO(file_bytes),
-            dtype=str
-        )
-
+        df = pd.read_excel(uploaded_file, dtype=str)
     else:
         st.error("対応していないファイル形式です")
         return None
 
+    # ★ 列名を正規化（前後スペース除去）
+    df.columns = df.columns.str.strip()
+
     row_count = len(df)
     MAX_COL = 150
 
-    # numpyへ変換
     base_array = df.to_numpy(dtype=object)
 
     if base_array.shape[1] < MAX_COL:
@@ -78,8 +61,8 @@ def process_file(uploaded_file):
         104: "所定外深夜時間",
         106: "所定外勤務時間",
         107: "休日深夜時間",
-        108: "乖離時間(開始)",
-        109: "乖離時間(終了)",
+        108: "乖離時間（始業）",
+        109: "乖離時間（終業）",
         110: "年休換算時間",
         111: "調休換算時間",
         112: "不就業１時間",
@@ -97,9 +80,12 @@ def process_file(uploaded_file):
 
     for excel_col, col_name in mapping.items():
         if col_name in df.columns:
-            converted = convert_time_series(df[col_name])  # 全行
+            # ★ 全行を一旦変換
+            converted = convert_time_series(df[col_name])
+
+            # ★ 1行目はそのまま、2行目以降だけ書き込む
             final_array[1:, excel_col - 1] = converted.iloc[1:].values
-        
+
             converted_cache[col_name] = converted
 
     # 深夜時間計
@@ -108,11 +94,10 @@ def process_file(uploaded_file):
             converted_cache["所定内深夜時間"]
             + converted_cache["所定外深夜時間"]
         )
-        final_array[1:, 105 - 1] = total.values
+        final_array[1:, 105 - 1] = total.iloc[1:].values
 
     final_df = pd.DataFrame(final_array)
 
-    # ヘッダー整形
     headers = list(df.columns)
     while len(headers) < final_df.shape[1]:
         headers.append("")
@@ -126,12 +111,12 @@ def process_file(uploaded_file):
 
     final_df.columns = headers
 
-    # BytesIO出力
     output = BytesIO()
     final_df.to_excel(output, index=False, engine="xlsxwriter")
     output.seek(0)
 
     return output
+
 
 
 # ===== UI =====
@@ -158,4 +143,5 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
 
