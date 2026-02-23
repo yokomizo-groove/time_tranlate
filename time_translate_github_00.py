@@ -25,44 +25,64 @@ def convert_time_series(series):
 def process_file(uploaded_file):
 
     ext = os.path.splitext(uploaded_file.name)[1].lower()
-
-    # ★ ファイルポインタを先頭に戻す（これが超重要）
     uploaded_file.seek(0)
 
+    MAX_COL = 150
+
+    # ===== CSV の場合：pandas を使わずに行ごとに読み込む =====
     if ext == ".csv":
-        uploaded_file.seek(0)
-        try:
-            df = pd.read_csv(uploaded_file, dtype=str, encoding="utf-8", engine="python")
-        except UnicodeDecodeError:
-            uploaded_file.seek(0)
-            df = pd.read_csv(uploaded_file, dtype=str, encoding="cp932", engine="python")
+        raw = uploaded_file.read().decode("utf-8", errors="ignore").splitlines()
 
+        rows = []
+        for line in raw:
+            cols = line.split(",")
+            rows.append(cols)
 
+        row_count = len(rows)
+
+        # ★ 150 列 × 行数の配列を作成
+        base_array = np.empty((row_count, MAX_COL), dtype=object)
+        base_array[:] = ""
+
+        # ★ 各行を左詰めで格納
+        for i, cols in enumerate(rows):
+            limit = min(len(cols), MAX_COL)
+            base_array[i, :limit] = cols[:limit]
+
+        # pandas DataFrame に変換
+        df = pd.DataFrame(base_array)
+
+        # 1 行目をヘッダーにする
+        df.columns = df.iloc[0]
+        df = df[1:].reset_index(drop=True)
+
+    # ===== Excel の場合 =====
     elif ext in [".xlsx", ".xlsm"]:
-        uploaded_file.seek(0)  # ★ Excel 読み込み前も必要
-        df = pd.read_excel(uploaded_file, dtype=str)
+        uploaded_file.seek(0)
+        df = pd.read_excel(uploaded_file, dtype=str).fillna("")
+        row_count = len(df)
+
+        base_array = df.to_numpy(dtype=object)
+
+        if base_array.shape[1] < MAX_COL:
+            pad = np.empty((row_count, MAX_COL - base_array.shape[1]), dtype=object)
+            pad[:] = ""
+            base_array = np.hstack([base_array, pad])
+
+        df = pd.DataFrame(base_array)
+        df.columns = df.iloc[0]
+        df = df[1:].reset_index(drop=True)
 
     else:
         st.error("対応していないファイル形式です")
         return None
 
-    # ★ 列名を正規化（前後スペース除去）
+    # ===== ここから先はあなたの元の処理 =====
+
     df.columns = df.columns.str.strip()
 
     row_count = len(df)
-    MAX_COL = 150
-
-    base_array = df.to_numpy(dtype=object)
-
-    if base_array.shape[1] < MAX_COL:
-        pad = np.empty((row_count, MAX_COL - base_array.shape[1]), dtype=object)
-        pad[:] = ""
-        base_array = np.hstack([base_array, pad])
-
-    # ★ ここを deep copy にする
-    final_array = base_array.copy()
-
-
+    final_array = df.to_numpy(dtype=object)
 
     mapping = {
         99: "法定内超勤時間",
@@ -92,20 +112,12 @@ def process_file(uploaded_file):
 
     for excel_col, col_name in mapping.items():
         if col_name in df.columns:
-            # ★ 全行を一旦変換
             converted = convert_time_series(df[col_name])
-
-            # ★ 1行目はそのまま、2行目以降だけ書き込む
             final_array[1:, excel_col - 1] = converted.iloc[1:].values
-
             converted_cache[col_name] = converted
 
-    # 深夜時間計
     if "所定内深夜時間" in converted_cache and "所定外深夜時間" in converted_cache:
-        total = (
-            converted_cache["所定内深夜時間"]
-            + converted_cache["所定外深夜時間"]
-        )
+        total = converted_cache["所定内深夜時間"] + converted_cache["所定外深夜時間"]
         final_array[1:, 105 - 1] = total.iloc[1:].values
 
     final_df = pd.DataFrame(final_array)
@@ -155,6 +167,7 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
 
 
 
