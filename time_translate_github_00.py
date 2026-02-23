@@ -50,7 +50,8 @@ def process_file(uploaded_file):
         pad[:] = ""
         base_array = np.hstack([base_array, pad])
 
-    final_array = base_array
+    final_array = base_array.copy()
+
 
     mapping = {
         99: "法定内超勤時間",
@@ -143,5 +144,6 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
 
 
