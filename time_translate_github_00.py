@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import os
+import io
 from io import BytesIO
 
 st.set_page_config(page_title="勤怠変換アプリ", layout="centered")
@@ -25,13 +26,32 @@ def process_file(uploaded_file):
 
     ext = os.path.splitext(uploaded_file.name)[1].lower()
 
+    # ===== 重要：ポインタを先頭へ =====
+    uploaded_file.seek(0)
+    file_bytes = uploaded_file.read()
+
     if ext == ".csv":
+
         try:
-            df = pd.read_csv(uploaded_file, dtype=str, encoding="utf-8")
+            df = pd.read_csv(
+                io.BytesIO(file_bytes),
+                dtype=str,
+                encoding="utf-8"
+            )
         except UnicodeDecodeError:
-            df = pd.read_csv(uploaded_file, dtype=str, encoding="cp932")
+            df = pd.read_csv(
+                io.BytesIO(file_bytes),
+                dtype=str,
+                encoding="cp932"
+            )
+
     elif ext in [".xlsx", ".xlsm"]:
-        df = pd.read_excel(uploaded_file, dtype=str)
+
+        df = pd.read_excel(
+            BytesIO(file_bytes),
+            dtype=str
+        )
+
     else:
         st.error("対応していないファイル形式です")
         return None
@@ -135,4 +155,5 @@ if uploaded_file is not None:
             data=result_file,
             file_name=download_name,
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
         )
