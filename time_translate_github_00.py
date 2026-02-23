@@ -31,8 +31,8 @@ def process_file(uploaded_file):
 
     # ===== CSV の場合：pandas を使わずに行ごとに読み込む =====
     if ext == ".csv":
-    uploaded_file.seek(0)
-    raw_bytes = uploaded_file.read()
+        uploaded_file.seek(0)
+        raw_bytes = uploaded_file.read()
 
     # ★ まず UTF-8 で試す
     try:
@@ -182,6 +182,7 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
 
 
 
