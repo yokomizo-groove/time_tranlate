@@ -71,8 +71,8 @@ def process_file(uploaded_file):
         104: "所定外深夜時間",
         106: "所定外勤務時間",
         107: "休日深夜時間",
-        108: "乖離時間（始業）",
-        109: "乖離時間（終業）",
+        108: "乖離時間(開始)",
+        109: "乖離時間(終了)",
         110: "年休換算時間",
         111: "調休換算時間",
         112: "不就業１時間",
@@ -153,6 +153,7 @@ if uploaded_file is not None:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
         )
+
 
 
 
